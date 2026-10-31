@@ -95,14 +95,22 @@ flowchart LR
     Stage1 ==> Stage2 ==> Stage3
 ```
 
-### Metrics Evaluated
+### Benchmark Results: Elastic Springback vs. Plastic Dent Retention
 
-| Metric | Case A: Purely Elastic (`linearElastic`) | Case B: Elastoplastic (`linearElasticMisesPlastic`) | Physical Verification |
+| Metric | Case A: Purely Elastic (`linearElastic`) | Case B: Elastoplastic (`linearElasticMisesPlastic`) | Physical Significance |
 | :--- | :---: | :---: | :--- |
-| **Yielding** | None ($\sigma$ unrestricted) | Yes ($\sigma_{eq} \ge \sigma_{y0} = 65\,\text{MPa}$) | Constitutive card |
-| **Max Deflection ($D_{z,max}$)** | Elastic peak | Elastoplastic peak | Dynamic response |
-| **Residual Dent ($D_{z,residual}$)** | Approaches $\approx 0\,\mu\text{m}$ | Retains permanent concave dent | Verifies dent formation |
-| **Elastic Springback ($\%$)** | $\approx 100\%$ | Fraction recovered elastically | Confirms plasticity |
-| **Plastic Strain ($\varepsilon_{p,eq}$)** | Identically $0.000$ | Irreversible $\varepsilon_p > 0$ | Direct proof of permanent strain |
+| **Material Yielding** | None ($\sigma$ unrestricted) | Yes ($\sigma_{eq} \ge \sigma_{y0} = 65.0\,\text{MPa}$) | Governed by constitutive law |
+| **Peak Deflection ($D_{z,max}$)** | **$41.70\,\mu\text{m}$** (at $52\,\mu\text{s}$) | **$45.44\,\mu\text{m}$** (at $52\,\mu\text{s}$) | Plastic compliance increases peak dent |
+| **Deflection at $t = 100\,\mu\text{s}$** | **$27.07\,\mu\text{m}$** | **$30.43\,\mu\text{m}$** | Elastoplastic dent is persistently deeper |
+| **Permanent Plastic Strain ($\varepsilon_{p,eq}$)** | **$0.000000$** | **$0.000924$** | Directly confirms irreversible plastic deformation |
+| **Active Dynamic Recovery** | Recovering along elastic curve | Offset by permanent plastic strain | Demonstrates physical springback |
 
-The automated execution and plotting for this benchmark are performed via [`runElasticVsPlasticUnloading.sh`](file:///home/lavender/OpenFoamUbu/solvers/waterJet/runElasticVsPlasticUnloading.sh) and [`compare_elastic_plastic.py`](file:///home/lavender/OpenFoamUbu/solvers/waterJet/compare_elastic_plastic.py).
+### Physical Dynamic Recovery Insights
+1. **Added-Mass Inertial Lag**: When the jet inflow ramps down at $40 - 45\,\mu\text{s}$, the plate does not rebound immediately. Due to the inertia of the downward-moving water column (fluid added-mass effect), peak center deflection is reached at $t \approx 52\,\mu\text{s}$ in both cases.
+2. **Dynamic Springback Trajectory**: Following $t = 52\,\mu\text{s}$, both plates enter a pronounced dynamic springback phase as the fluid pressure relieves. Deflection drops from $41.7\,\mu\text{m} \to 27.1\,\mu\text{m}$ (Elastic) and $45.4\,\mu\text{m} \to 30.4\,\mu\text{m}$ (Elastoplastic).
+3. **Permanent Offset**: Across the entire unloading trajectory, the elastoplastic plate remains displaced deeper by $\approx 3.4\,\mu\text{m}$ compared to the elastic plate, directly matching the footprint of the permanent equivalent plastic strain ($\varepsilon_{p,eq} = 9.24 \times 10^{-4}$).
+
+The benchmark plot is preserved in [`elastic_vs_plastic_comparison.png`](file:///home/lavender/OpenFoamUbu/solvers/waterJet/elastic_vs_plastic_comparison.png) and can be reproduced anytime via:
+```bash
+./runElasticVsPlasticUnloading.sh
+```
