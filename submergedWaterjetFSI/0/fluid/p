@@ -29,7 +29,6 @@ boundaryField
 
     outlet
     {
-        // Ambient pressure in the submerged water tank
         type            fixedValue;
         value           uniform 0;
     }
