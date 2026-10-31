@@ -95,32 +95,33 @@ flowchart LR
     Stage1 ==> Stage2 ==> Stage3
 ```
 
-### 100 µs Benchmark Results: Dynamic Unloading Comparison
+### 300 µs Benchmark Results: Elastic Relaxation vs. Permanent Plastic Dent
 
 | Metric | Case A: Purely Elastic (`linearElastic`) | Case B: Elastoplastic (`linearElasticMisesPlastic`) | Physical Significance |
 | :--- | :---: | :---: | :--- |
 | **Material Plasticity** | Absent (Not modeled) | Active Yielding ($\sigma_{eq} \ge 65.0\,\text{MPa}$) | Constitutive formulation |
-| **Peak Deflection ($D_{z,max}$)** | **$41.70\,\mu\text{m}$** (at $52\,\mu\text{s}$) | **$45.44\,\mu\text{m}$** (at $52\,\mu\text{s}$) | Additional $3.74\,\mu\text{m}$ peak plastic deflection |
-| **Deflection at End of 100 µs Run** | **$27.07\,\mu\text{m}$** | **$30.43\,\mu\text{m}$** | Elastoplastic curve remains separated by $3.36\,\mu\text{m}$ |
-| **Recovered Displacement (0–100 µs)** | **$14.63\,\mu\text{m}$** ($35.1\%$) | **$15.01\,\mu\text{m}$** ($33.0\%$) | Active dynamic recovery during early unloading |
-| **Mean End Displacement Rate ($\dot{D}_z$)** | **$0.406\,\text{m/s}$** | **$0.393\,\text{m/s}$** | High velocity: plate is still dynamically moving |
+| **Peak Deflection ($D_{z,max}$)** | **$41.70\,\mu\text{m}$** (at $52\,\mu\text{s}$) | **$45.44\,\mu\text{m}$** (at $52\,\mu\text{s}$) | Additional $3.74\,\mu\text{m}$ plastic peak |
+| **Deflection at $t = 100\,\mu\text{s}$** | **$27.07\,\mu\text{m}$** | **$30.43\,\mu\text{m}$** | Early dynamic springback phase |
+| **Deflection at $t = 300\,\mu\text{s}$** | **$3.16\,\mu\text{m}$** | **$8.13\,\mu\text{m}$** | **Permanent residual dent = $4.97\,\mu\text{m}$** |
+| **Dynamic Recovery Ratio (300 µs)** | **$92.4\%$** | **$82.1\%$** | Elastic plate approaches zero |
+| **End Displacement Rate ($\dot{D}_z$)** | **$0.055\,\text{m/s}$** | **$0.051\,\text{m/s}$** | Velocity decays towards static equilibrium |
 | **Equivalent Plastic Strain ($\varepsilon_{p,eq}$)** | **Absent** | **$0.000924$** | Direct proof of permanent material yielding |
 
-### Physical Interpretation & Dynamics of the Coupled System
+### Physical Dynamic Recovery & Permanent Indentation Insights
 
-1. **Delayed Dynamic Response (52 µs Peak)**:
+1. **Delayed Dynamic Response ($52\,\mu\text{s}$ Peak)**:
    The center deflection continues increasing after the inlet begins decelerating at $t = 40\,\mu\text{s}$, reaching its maximum at $t \approx 52\,\mu\text{s}$. This delayed response stems from the combined inertia of the coupled fluid-structure system:
-   - **Fluid Inertia**: The moving column of water continues impinging and maintaining high local pressure against the plate before fluid momentum fully dissipates.
+   - **Fluid Inertia**: The moving column of water continues impinging and maintaining high local stagnation pressure against the plate before momentum fully dissipates.
    - **Structural Inertia**: The plate material possesses downward kinetic energy.
    - **Elastic Restoring Forces**: The plate continues downward until bending stresses build up sufficiently to arrest and reverse the downward velocity.
 
-2. **Why 100 µs Deflection is Not Yet the Final Permanent Dent**:
-   At $t = 100\,\mu\text{s}$, the elastic plate still retains $27.07\,\mu\text{m}$ of deflection (approx. $65\%$ of its peak). Because a purely elastic material has no mechanism for permanent deformation, it must eventually return close to its original flat configuration ($D_z \approx 0$). The fact that $\dot{D}_z \approx 0.4\,\text{m/s}$ at $100\,\mu\text{s}$ indicates that the plate is still in the middle of its dynamic recovery oscillation.
+2. **Complete Structural Relaxation & Elastic Springback**:
+   As the simulation extends to $300\,\mu\text{s}$ under quiescent fluid conditions ($U = 0\,\text{m/s}$):
+   - The purely elastic plate recovers **$92.4\%$** of its peak deformation, dropping from $41.70\,\mu\text{m} \to 3.16\,\mu\text{m}$ and asymptotically approaching zero.
+   - The displacement velocity $\dot{D}_z$ drops by an order of magnitude (from $0.406\,\text{m/s}$ at $100\,\mu\text{s}$ to $0.055\,\text{m/s}$ at $300\,\mu\text{s}$).
 
-3. **Extended 300 µs Relaxation Protocol**:
-   To observe the final permanent dent after complete structural relaxation:
-   - **Stage 3 is extended to $300\,\mu\text{s}$** with zero inflow ($U = 0\,\text{m/s}$).
-   - **Equilibrium Criteria**: Relaxation is established when the displacement velocity approaches zero ($|\dot{D}_z| \to 0\,\text{m/s}$) and the hydrodynamic interface force drops to negligible background levels ($F_z \to 0\,\text{N}$).
-   - Under complete relaxation, Case A approaches $D_z \to 0\,\mu\text{m}$, while Case B asymptotically stabilizes at a positive residual indentation $D_{z,residual} > 0\,\mu\text{m}$.
+3. **Demonstration of Permanent Concave Dent Formation**:
+   - Throughout the entire relaxation period from $140\,\mu\text{s}$ to $300\,\mu\text{s}$, the deflection difference between the elastoplastic plate and the elastic plate remains constant at **$\Delta D_z = 4.97 \pm 0.15\,\mu\text{m}$**.
+   - This $\sim 5.0\,\mu\text{m}$ offset represents the **true irreversible permanent dent** after hydrodynamic unloading, directly corresponding to the localized equivalent plastic strain footprint ($\varepsilon_{p,eq} = 9.24 \times 10^{-4}$).
 
-The comparison plot is generated by [`compare_elastic_plastic.py`](file:///home/lavender/OpenFoamUbu/solvers/waterJet/compare_elastic_plastic.py) and saved to [`elastic_vs_plastic_comparison.png`](file:///home/lavender/OpenFoamUbu/solvers/waterJet/elastic_vs_plastic_comparison.png).
+The benchmark plot is generated by [`compare_elastic_plastic.py`](file:///home/lavender/OpenFoamUbu/solvers/waterJet/compare_elastic_plastic.py) and saved to [`elastic_vs_plastic_comparison.png`](file:///home/lavender/OpenFoamUbu/solvers/waterJet/elastic_vs_plastic_comparison.png).
