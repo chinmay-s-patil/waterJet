@@ -18,13 +18,11 @@ defaultFieldValues
 
 regions
 (
-    // Cylindrical initialised nozzle region connected directly to inlet boundary
-    // and extending almost all the way to the copper plate (Z = 0.0002 to 0.006001)
-    cylinderToCell
+    // Square nozzle jet column matching the 2x2 mm inlet patch geometry
+    // extending from z = 6.001 mm down to 0.2 mm above the copper plate
+    boxToCell
     {
-        point1  (0 0 0.006001); // Top inlet boundary (connected)
-        point2  (0 0 0.0002);   // Extends down to 0.2 mm above plate
-        radius  0.001;          // Nozzle radius 1 mm
+        box (-0.001001 -0.001001 0.0002) (0.001001 0.001001 0.006001);
         fieldValues
         (
             volVectorFieldValue U (0 0 -30)

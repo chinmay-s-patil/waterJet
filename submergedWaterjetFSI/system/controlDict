@@ -19,13 +19,13 @@ startTime       0;
 
 stopAt          endTime;
 
-endTime         4e-06; // 100 microseconds
+endTime         1e-04;  // 100 microseconds (50 steps)
 
 deltaT          2e-06;  // 2 microseconds (Co < 0.5)
 
 writeControl    timeStep;
 
-writeInterval   1;      // write every 10 microseconds (10 time directories total)
+writeInterval   5;      // write every 10 microseconds (10 output states)
 
 purgeWrite      0;
 
@@ -45,6 +45,22 @@ functions
     {
         type    solidPointDisplacement;
         point   (0 0 0); // center of copper plate interface
+    }
+
+    interfaceForces
+    {
+        type                forces;
+        region              fluid;
+        libs                ( "libforces.so" );
+        writeControl        timeStep;
+        writeInterval       1;
+        patches             (plate);
+        "pName|p"           p;
+        "UName|U"           U;
+        "rhoName|rho"       rhoInf;
+        log                 true;
+        rhoInf              1000;
+        CofR                (0 0 0);
     }
 }
 

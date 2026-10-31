@@ -25,9 +25,13 @@ if [ -n "$1" ]; then
     JET_VEL=$1
     echo "Configuring jet inlet velocity: ${JET_VEL} m/s"
     sed -i "s/uniform (0 0 -[0-9.]\+)/uniform (0 0 -${JET_VEL})/" 0/fluid/U
-    sed -i "s/volVectorFieldValue U (0 0 -[0-9.]\+)/volVectorFieldValue U (0 0 -${VEL})/" system/fluid/setFieldsDict
-    sed -i "s/volVectorFieldValue U (0 0 -[0-9.]\+)/volVectorFieldValue U (0 0 -${VEL})/" system/setFieldsDict
+    sed -i "s/volVectorFieldValue U (0 0 -[0-9.]\+)/volVectorFieldValue U (0 0 -${JET_VEL})/" system/fluid/setFieldsDict
+    sed -i "s/volVectorFieldValue U (0 0 -[0-9.]\+)/volVectorFieldValue U (0 0 -${JET_VEL})/" system/setFieldsDict
 fi
+
+echo "Verifying velocity configuration consistency:"
+grep -n "uniform (0 0 -" 0/fluid/U
+grep -n "volVectorFieldValue U" system/fluid/setFieldsDict
 
 # 1. Generate solid plate mesh (8 cells through thickness)
 echo "Step 1: Meshing solid copper plate..."
@@ -37,7 +41,7 @@ blockMesh -region solid > log.blockMeshSolid 2>&1
 echo "Step 2: Meshing fluid water domain..."
 blockMesh -region fluid > log.blockMeshFluid 2>&1
 
-# 3. Initialise nozzle jet region connected down to 0.2 mm above plate
+# 3. Initialise nozzle jet region matching 2x2 mm square inlet down to 0.2 mm above plate
 echo "Step 3: Initialising nozzle jet velocity field via setFields..."
 setFields -region fluid > log.setFieldsFluid 2>&1
 

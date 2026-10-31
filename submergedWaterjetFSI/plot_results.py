@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Comprehensive Post-Processing Script for Submerged Waterjet FSI Simulation.
+Comprehensive Post-Processing & Validation Diagnostics for Submerged Waterjet FSI.
 Tracks:
-1. Center plate downward indentation depth (Dz) vs time.
+1. Center plate downward indentation depth (Dz) vs time [um].
 2. Peak von Mises stress (sigmaEq) in solid plate vs initial yield limit (sigmaY0 = 65 MPa).
 3. Peak equivalent plastic strain (epsilonPEq) in solid plate (permanent dent metric).
-4. Yield status and active yielding cell counts.
+4. Interface forces (pressure, viscous, total) from fluid/forces functionObject.
 """
 
 import sys
@@ -15,23 +15,61 @@ import re
 import numpy as np
 
 def parse_scalar_field(path):
+    """
+    Parses an OpenFOAM scalar field file (e.g., sigmaEq, epsilonPEq).
+    Returns max scalar value as float if present, or None if file is missing.
+    """
     if not os.path.exists(path):
-        return 0.0
-    with open(path, 'r', errors='ignore') as f:
-        text = f.read()
+        return None
+    try:
+        with open(path, 'r', errors='ignore') as f:
+            text = f.read()
+        
+        # Check for nonuniform list
+        match = re.search(r'internalField\s+nonuniform\s+List<scalar>\s+\d+\s*\((.*?)\)\s*;', text, re.DOTALL)
+        if match:
+            vals = [float(x) for x in match.group(1).split()]
+            return max(vals) if vals else 0.0
+        
+        # Check for uniform scalar
+        match = re.search(r'internalField\s+uniform\s+([0-9.eE+-]+);', text)
+        if match:
+            return float(match.group(1))
+    except Exception as e:
+        print(f"Warning parsing {path}: {e}")
+        return None
     
-    # Check for nonuniform list first
-    match = re.search(r'internalField\s+nonuniform\s+List<scalar>\s+\d+\s*\((.*?)\)\s*;', text, re.DOTALL)
-    if match:
-        vals = [float(x) for x in match.group(1).split()]
-        return max(vals) if vals else 0.0
-    
-    # Check for uniform scalar
-    match = re.search(r'internalField\s+uniform\s+([0-9.eE+-]+);', text)
-    if match:
-        return float(match.group(1))
-    
-    return 0.0
+    return None
+
+def parse_forces(path):
+    """
+    Parses OpenFOAM forces.dat file.
+    Returns (times, F_pressure_z, F_viscous_z, F_total_z)
+    """
+    if not os.path.exists(path):
+        return [], [], [], []
+    times, fp_z, fv_z, ft_z = [], [], [], []
+    with open(path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            # Format: time ((px py pz) (vx vy vz) (porox poroy poroz)) ...
+            # Extract numbers inside parentheses
+            m = re.findall(r'\(([0-9.eE+-]+)\s+([0-9.eE+-]+)\s+([0-9.eE+-]+)\)', line)
+            parts = line.split()
+            if len(parts) > 0 and len(m) >= 2:
+                try:
+                    t = float(parts[0])
+                    pz = float(m[0][2]) # Pressure force Z
+                    vz = float(m[1][2]) # Viscous force Z
+                    times.append(t * 1e6) # us
+                    fp_z.append(pz)
+                    fv_z.append(vz)
+                    ft_z.append(pz + vz)
+                except ValueError:
+                    continue
+    return times, fp_z, fv_z, ft_z
 
 def main():
     disp_file = "postProcessing/0/solidPointDisplacement_centerPlateDisplacement.dat"
@@ -40,7 +78,6 @@ def main():
         if candidates:
             disp_file = candidates[0]
         else:
-            print(f"Notice: {disp_file} not found.")
             disp_file = None
 
     times = []
@@ -55,9 +92,9 @@ def main():
                 if len(parts) >= 4:
                     try:
                         t = float(parts[0])
-                        # Dz is downward deflection in meters; convert to micrometers (um)
+                        # Dz downward deflection in meters -> convert to um
                         defl = -float(parts[3]) * 1e6
-                        times.append(t * 1e6) # microseconds
+                        times.append(t * 1e6) # us
                         dz_um.append(defl)
                     except ValueError:
                         continue
@@ -83,17 +120,27 @@ def main():
         sigma_file = os.path.join(solid_dir, "sigmaEq")
         epsp_file = os.path.join(solid_dir, "epsilonPEq")
         
-        s_max = parse_scalar_field(sigma_file) / 1e6 # Convert to MPa
-        p_max = parse_scalar_field(epsp_file)
+        s_val = parse_scalar_field(sigma_file)
+        p_val = parse_scalar_field(epsp_file)
         
         saved_times_us.append(t_val * 1e6)
-        max_sigma_mpa.append(s_max)
-        max_epsp.append(p_max)
+        max_sigma_mpa.append(s_val / 1e6 if s_val is not None else None)
+        max_epsp.append(p_val)
+
+    # Check for forces file
+    forces_candidates = glob.glob("postProcessing/fluid/forces/*/forces.dat") + \
+                        glob.glob("postProcessing/forces/*/forces.dat") + \
+                        glob.glob("postProcessing/*/forces.dat")
+    f_times, fp_z, fv_z, ft_z = [], [], [], []
+    if forces_candidates:
+        f_times, fp_z, fv_z, ft_z = parse_forces(forces_candidates[0])
 
     print("==========================================================================")
     print(" Submerged Continuous Waterjet on Copper Plate: FSI Diagnostics Summary   ")
     print("==========================================================================")
-    print(f"Annealed Copper Yield Stress: 65.0 MPa | Plate Thickness: 0.3 mm")
+    print("Annealed Copper Yield Stress: 65.0 MPa | Plate Thickness: 0.3 mm")
+    print("Jet Velocity: 30 m/s | Square Nozzle: 2x2 mm (Area: 4 mm²)")
+    print("Theoretical Steady Jet Momentum Thrust: F = rho * A * U² = 3.60 N")
     print("--------------------------------------------------------------------------")
     
     if times:
@@ -105,26 +152,27 @@ def main():
         print("--------------------------------------------------------------------------")
         
         for t, d in zip(times, dz_um):
-            # Find closest saved time dir
             s_str = "---"
             p_str = "---"
             if saved_times_us:
                 idx = np.argmin(np.abs(np.array(saved_times_us) - t))
                 if abs(saved_times_us[idx] - t) < 1e-3:
-                    s_str = f"{max_sigma_mpa[idx]:.2f}"
-                    p_str = f"{max_epsp[idx]:.6f}"
+                    s_val = max_sigma_mpa[idx]
+                    p_val = max_epsp[idx]
+                    s_str = f"{s_val:.2f}" if s_val is not None else "[MISSING]"
+                    p_str = f"{p_val:.6f}" if p_val is not None else "[MISSING]"
             print(f"{t:10.2f} | {d:16.4f} | {s_str:>16} | {p_str:>18}")
         print("==========================================================================")
     else:
         print("No displacement history records found.")
 
-    # Generate multi-panel plot
+    # 3-Panel Diagnostic Plot
     try:
         import matplotlib
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
 
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 8), sharex=True)
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(9, 10), sharex=True)
         
         # Panel 1: Center Displacement
         if times:
@@ -132,21 +180,32 @@ def main():
             ax1.set_ylabel('Dent Depth [$\\mu$m]', fontsize=11, fontweight='bold', color='navy')
             ax1.grid(True, linestyle='--', alpha=0.6)
             ax1.legend(loc='upper left', fontsize=10)
-            ax1.set_title('Submerged Waterjet Elastoplastic Impact Dynamics', fontsize=12, fontweight='bold')
+            ax1.set_title('Submerged Waterjet Impact on Copper Plate: FSI Diagnostics', fontsize=13, fontweight='bold')
 
-        # Panel 2: Max Stress vs Yield Stress
-        if saved_times_us:
-            ax2.plot(saved_times_us, max_sigma_mpa, 'r-s', lw=2, markersize=5, label='Peak von Mises Stress $\\sigma_{eq}$')
+        # Panel 2: Peak von Mises Stress vs Yield Stress
+        valid_s_pts = [(t, s) for t, s in zip(saved_times_us, max_sigma_mpa) if s is not None]
+        if valid_s_pts:
+            ts, ss = zip(*valid_s_pts)
+            ax2.plot(ts, ss, 'r-s', lw=2, markersize=5, label='Peak von Mises Stress $\\sigma_{eq}$')
             ax2.axhline(65.0, color='darkred', linestyle='--', lw=1.5, label='Initial Yield Stress $\\sigma_{y0} = 65$ MPa')
-            ax2.set_ylabel('Von Mises Stress [MPa]', fontsize=11, fontweight='bold', color='darkred')
+            ax2.set_ylabel('Stress [MPa]', fontsize=11, fontweight='bold', color='darkred')
             ax2.grid(True, linestyle='--', alpha=0.6)
             ax2.legend(loc='upper left', fontsize=10)
 
-        ax2.set_xlabel('Simulation Time [$\\mu$s]', fontsize=11, fontweight='bold')
+        # Panel 3: Equivalent Plastic Strain
+        valid_p_pts = [(t, p) for t, p in zip(saved_times_us, max_epsp) if p is not None]
+        if valid_p_pts:
+            tp, pp = zip(*valid_p_pts)
+            ax3.plot(tp, pp, 'g-^', lw=2, markersize=5, label='Peak Equivalent Plastic Strain $\\varepsilon_{p,eq}$')
+            ax3.set_ylabel('Plastic Strain [-]', fontsize=11, fontweight='bold', color='darkgreen')
+            ax3.grid(True, linestyle='--', alpha=0.6)
+            ax3.legend(loc='upper left', fontsize=10)
+
+        ax3.set_xlabel('Simulation Time [$\\mu$s]', fontsize=11, fontweight='bold')
         plt.tight_layout()
         out_img = "indentation_vs_time.png"
         plt.savefig(out_img, dpi=200)
-        print(f"High-resolution diagnostic plot saved to: {out_img}")
+        print(f"3-Panel diagnostic plot saved to: {out_img}")
     except Exception as e:
         print(f"Plot generation note: {e}")
 
