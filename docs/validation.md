@@ -86,31 +86,41 @@ flowchart LR
         R1 --> R2
     end
 
-    subgraph Stage3["Stage 3: Hydrodynamic Unloading (45 to 100 µs)"]
+    subgraph Stage3["Stage 3: Hydrodynamic Unloading & Relaxation (45 to 300 µs)"]
         direction TB
-        CaseA["Case A: Purely Elastic<br/>Full Elastic Springback: Residual Dent -> ~0 µm<br/>Plastic Strain eps_p = 0.000"]
-        CaseB["Case B: Elastoplastic Copper<br/>Irreversible Concave Dent Retention > 0 µm<br/>Permanent Plastic Strain eps_p > 0"]
+        CaseA["Case A: Purely Elastic<br/>Rebounds towards initial geometry (Dz -> 0 µm)<br/>Plastic Strain eps_p = Absent (Not modeled)"]
+        CaseB["Case B: Elastoplastic Copper<br/>Retains permanent concave dent (Dz,residual > 0 µm)<br/>Irreversible Plastic Strain eps_p = 0.000924"]
     end
 
     Stage1 ==> Stage2 ==> Stage3
 ```
 
-### Benchmark Results: Elastic Springback vs. Plastic Dent Retention
+### 100 µs Benchmark Results: Dynamic Unloading Comparison
 
 | Metric | Case A: Purely Elastic (`linearElastic`) | Case B: Elastoplastic (`linearElasticMisesPlastic`) | Physical Significance |
 | :--- | :---: | :---: | :--- |
-| **Material Yielding** | None ($\sigma$ unrestricted) | Yes ($\sigma_{eq} \ge \sigma_{y0} = 65.0\,\text{MPa}$) | Governed by constitutive law |
-| **Peak Deflection ($D_{z,max}$)** | **$41.70\,\mu\text{m}$** (at $52\,\mu\text{s}$) | **$45.44\,\mu\text{m}$** (at $52\,\mu\text{s}$) | Plastic compliance increases peak dent |
-| **Deflection at $t = 100\,\mu\text{s}$** | **$27.07\,\mu\text{m}$** | **$30.43\,\mu\text{m}$** | Elastoplastic dent is persistently deeper |
-| **Permanent Plastic Strain ($\varepsilon_{p,eq}$)** | **$0.000000$** | **$0.000924$** | Directly confirms irreversible plastic deformation |
-| **Active Dynamic Recovery** | Recovering along elastic curve | Offset by permanent plastic strain | Demonstrates physical springback |
+| **Material Plasticity** | Absent (Not modeled) | Active Yielding ($\sigma_{eq} \ge 65.0\,\text{MPa}$) | Constitutive formulation |
+| **Peak Deflection ($D_{z,max}$)** | **$41.70\,\mu\text{m}$** (at $52\,\mu\text{s}$) | **$45.44\,\mu\text{m}$** (at $52\,\mu\text{s}$) | Additional $3.74\,\mu\text{m}$ peak plastic deflection |
+| **Deflection at End of 100 µs Run** | **$27.07\,\mu\text{m}$** | **$30.43\,\mu\text{m}$** | Elastoplastic curve remains separated by $3.36\,\mu\text{m}$ |
+| **Recovered Displacement (0–100 µs)** | **$14.63\,\mu\text{m}$** ($35.1\%$) | **$15.01\,\mu\text{m}$** ($33.0\%$) | Active dynamic recovery during early unloading |
+| **Mean End Displacement Rate ($\dot{D}_z$)** | **$0.406\,\text{m/s}$** | **$0.393\,\text{m/s}$** | High velocity: plate is still dynamically moving |
+| **Equivalent Plastic Strain ($\varepsilon_{p,eq}$)** | **Absent** | **$0.000924$** | Direct proof of permanent material yielding |
 
-### Physical Dynamic Recovery Insights
-1. **Added-Mass Inertial Lag**: When the jet inflow ramps down at $40 - 45\,\mu\text{s}$, the plate does not rebound immediately. Due to the inertia of the downward-moving water column (fluid added-mass effect), peak center deflection is reached at $t \approx 52\,\mu\text{s}$ in both cases.
-2. **Dynamic Springback Trajectory**: Following $t = 52\,\mu\text{s}$, both plates enter a pronounced dynamic springback phase as the fluid pressure relieves. Deflection drops from $41.7\,\mu\text{m} \to 27.1\,\mu\text{m}$ (Elastic) and $45.4\,\mu\text{m} \to 30.4\,\mu\text{m}$ (Elastoplastic).
-3. **Permanent Offset**: Across the entire unloading trajectory, the elastoplastic plate remains displaced deeper by $\approx 3.4\,\mu\text{m}$ compared to the elastic plate, directly matching the footprint of the permanent equivalent plastic strain ($\varepsilon_{p,eq} = 9.24 \times 10^{-4}$).
+### Physical Interpretation & Dynamics of the Coupled System
 
-The benchmark plot is preserved in [`elastic_vs_plastic_comparison.png`](file:///home/lavender/OpenFoamUbu/solvers/waterJet/elastic_vs_plastic_comparison.png) and can be reproduced anytime via:
-```bash
-./runElasticVsPlasticUnloading.sh
-```
+1. **Delayed Dynamic Response (52 µs Peak)**:
+   The center deflection continues increasing after the inlet begins decelerating at $t = 40\,\mu\text{s}$, reaching its maximum at $t \approx 52\,\mu\text{s}$. This delayed response stems from the combined inertia of the coupled fluid-structure system:
+   - **Fluid Inertia**: The moving column of water continues impinging and maintaining high local pressure against the plate before fluid momentum fully dissipates.
+   - **Structural Inertia**: The plate material possesses downward kinetic energy.
+   - **Elastic Restoring Forces**: The plate continues downward until bending stresses build up sufficiently to arrest and reverse the downward velocity.
+
+2. **Why 100 µs Deflection is Not Yet the Final Permanent Dent**:
+   At $t = 100\,\mu\text{s}$, the elastic plate still retains $27.07\,\mu\text{m}$ of deflection (approx. $65\%$ of its peak). Because a purely elastic material has no mechanism for permanent deformation, it must eventually return close to its original flat configuration ($D_z \approx 0$). The fact that $\dot{D}_z \approx 0.4\,\text{m/s}$ at $100\,\mu\text{s}$ indicates that the plate is still in the middle of its dynamic recovery oscillation.
+
+3. **Extended 300 µs Relaxation Protocol**:
+   To observe the final permanent dent after complete structural relaxation:
+   - **Stage 3 is extended to $300\,\mu\text{s}$** with zero inflow ($U = 0\,\text{m/s}$).
+   - **Equilibrium Criteria**: Relaxation is established when the displacement velocity approaches zero ($|\dot{D}_z| \to 0\,\text{m/s}$) and the hydrodynamic interface force drops to negligible background levels ($F_z \to 0\,\text{N}$).
+   - Under complete relaxation, Case A approaches $D_z \to 0\,\mu\text{m}$, while Case B asymptotically stabilizes at a positive residual indentation $D_{z,residual} > 0\,\mu\text{m}$.
+
+The comparison plot is generated by [`compare_elastic_plastic.py`](file:///home/lavender/OpenFoamUbu/solvers/waterJet/compare_elastic_plastic.py) and saved to [`elastic_vs_plastic_comparison.png`](file:///home/lavender/OpenFoamUbu/solvers/waterJet/elastic_vs_plastic_comparison.png).

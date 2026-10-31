@@ -5,7 +5,7 @@ set -e
 # Benchmark Experiment: Purely Elastic vs Elastoplastic Dynamic Unloading
 # Stage 1 (0 to 40 us): Impinging jet loading at 30 m/s
 # Stage 2 (40 to 45 us): Jet ramp-down to 0 m/s
-# Stage 3 (45 to 100 us): Complete shut-off and hydrodynamic unloading
+# Stage 3 (45 to 300 us): Complete shut-off and hydrodynamic unloading / relaxation
 # Goal: Directly measure elastic springback vs permanent plastic dent retention
 # ==============================================================================
 
@@ -43,7 +43,7 @@ boundaryField
             (0.000000   (0 0 -30))
             (0.000040   (0 0 -30))
             (0.000045   (0 0 0))
-            (0.000100   (0 0 0))
+            (0.000300   (0 0 0))
         );
     }
 
@@ -71,17 +71,26 @@ boundaryField
 U_EOF
 }
 
+# Function to set extended simulation duration (300 us)
+configure_extended_duration() {
+    local case_dir="$1"
+    sed -i 's/endTime\s\+[0-9.eE+-]\+;/endTime         3e-04;/' "${case_dir}/system/controlDict"
+    sed -i 's/writeInterval\s\+[0-9]\+;/writeInterval   10;/' "${case_dir}/system/controlDict"
+}
+
 echo "=========================================================="
 echo " Setting up Case A: Purely Elastic Copper (linearElastic) "
+echo " Duration: 300 us (Loading 0-40us, Ramp 40-45us, Unload 45-300us)"
 echo "=========================================================="
 rm -rf case_elastic
 cp -r "${BASE_CASE}" case_elastic
 cd case_elastic
 ./Allclean
 
-# 1. Configure loading-unloading inlet
+# 1. Configure loading-unloading inlet & 300 us duration
 configure_unloading_inlet "0/fluid/U"
 configure_unloading_inlet "0.orig/fluid/U"
+configure_extended_duration "."
 
 # 2. Configure purely linear elastic copper material
 cat << 'MEC_EOF' > constant/solid/mechanicalProperties
@@ -125,15 +134,17 @@ echo ">>> Case A completed."
 
 echo "=========================================================="
 echo " Setting up Case B: Elastoplastic Copper (Mises Plastic)  "
+echo " Duration: 300 us (Loading 0-40us, Ramp 40-45us, Unload 45-300us)"
 echo "=========================================================="
 rm -rf case_plastic
 cp -r "${BASE_CASE}" case_plastic
 cd case_plastic
 ./Allclean
 
-# 1. Configure loading-unloading inlet
+# 1. Configure loading-unloading inlet & 300 us duration
 configure_unloading_inlet "0/fluid/U"
 configure_unloading_inlet "0.orig/fluid/U"
+configure_extended_duration "."
 
 echo "Meshing and running Case B (Elastoplastic)..."
 blockMesh -region solid > log.blockMeshSolid 2>&1
