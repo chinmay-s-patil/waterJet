@@ -5,7 +5,7 @@ set -e
 # Benchmark Experiment: Purely Elastic vs Elastoplastic Dynamic Unloading
 # Stage 1 (0 to 40 us): Impinging jet loading at 30 m/s
 # Stage 2 (40 to 45 us): Jet ramp-down to 0 m/s
-# Stage 3 (45 to 300 us): Complete shut-off and hydrodynamic unloading / relaxation
+# Stage 3 (45 to 500 us): Complete shut-off and extended hydrodynamic relaxation
 # Goal: Directly measure elastic springback vs permanent plastic dent retention
 # ==============================================================================
 
@@ -43,7 +43,7 @@ boundaryField
             (0.000000   (0 0 -30))
             (0.000040   (0 0 -30))
             (0.000045   (0 0 0))
-            (0.000300   (0 0 0))
+            (0.000500   (0 0 0))
         );
     }
 
@@ -71,23 +71,25 @@ boundaryField
 U_EOF
 }
 
-# Function to set extended simulation duration (300 us)
+# Function to set extended simulation duration (500 us) with per-step force logging
 configure_extended_duration() {
     local case_dir="$1"
-    sed -i 's/endTime\s\+[0-9.eE+-]\+;/endTime         3e-04;/' "${case_dir}/system/controlDict"
-    sed -i 's/writeInterval\s\+[0-9]\+;/writeInterval   10;/' "${case_dir}/system/controlDict"
+    sed -i 's/^endTime\s\+[0-9.eE+-]\+;/endTime         5e-04;/' "${case_dir}/system/controlDict"
+    sed -i 's/^writeInterval\s\+[0-9]\+;/writeInterval   25;/' "${case_dir}/system/controlDict"
+    # Ensure interfaceForces writes every timeStep
+    sed -i '/interfaceForces/,/}/ s/writeInterval\s\+[0-9]\+;/writeInterval       1;/' "${case_dir}/system/controlDict"
 }
 
 echo "=========================================================="
 echo " Setting up Case A: Purely Elastic Copper (linearElastic) "
-echo " Duration: 300 us (Loading 0-40us, Ramp 40-45us, Unload 45-300us)"
+echo " Duration: 500 us (Loading 0-40us, Ramp 40-45us, Unload 45-500us)"
 echo "=========================================================="
 rm -rf case_elastic
 cp -r "${BASE_CASE}" case_elastic
 cd case_elastic
 ./Allclean
 
-# 1. Configure loading-unloading inlet & 300 us duration
+# 1. Configure loading-unloading inlet & 500 us duration
 configure_unloading_inlet "0/fluid/U"
 configure_unloading_inlet "0.orig/fluid/U"
 configure_extended_duration "."
@@ -134,14 +136,14 @@ echo ">>> Case A completed."
 
 echo "=========================================================="
 echo " Setting up Case B: Elastoplastic Copper (Mises Plastic)  "
-echo " Duration: 300 us (Loading 0-40us, Ramp 40-45us, Unload 45-300us)"
+echo " Duration: 500 us (Loading 0-40us, Ramp 40-45us, Unload 45-500us)"
 echo "=========================================================="
 rm -rf case_plastic
 cp -r "${BASE_CASE}" case_plastic
 cd case_plastic
 ./Allclean
 
-# 1. Configure loading-unloading inlet & 300 us duration
+# 1. Configure loading-unloading inlet & 500 us duration
 configure_unloading_inlet "0/fluid/U"
 configure_unloading_inlet "0.orig/fluid/U"
 configure_extended_duration "."

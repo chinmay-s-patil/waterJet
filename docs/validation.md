@@ -64,8 +64,8 @@ In a continuous loading simulation, structural deflection reflects both elastic 
 ### Loading-Unloading Schedule
 Using OpenFOAM's `uniformFixedValue` table boundary condition on the inlet, the simulation is partitioned into three stages:
 1. **Stage 1: Dynamic Loading ($0 \le t \le 40\,\mu\text{s}$)**: Inflow maintained at $U_z = -30\,\text{m/s}$. Full stagnation zone and plastic deformation develop.
-2. **Stage 2: Ramp-Down ($40 < t \le 45\,\mu\text{s}$)**: Inflow velocity linearly decelerated to $0\,\text{m/s}$.
-3. **Stage 3: Hydrodynamic Unloading ($45 < t \le 100\,\mu\text{s}$)**: Inflow maintained at $0\,\text{m/s}$. Chamber pressures equalize, allowing the plate to dynamically unload.
+2. **Stage 2: Ramp-Down ($40 < t \le 45\,\mu\text{s}$)**: Inflow velocity linearly decelerated from $30\,\text{m/s}$ to $0\,\text{m/s}$.
+3. **Stage 3: Extended Dynamic Relaxation ($45 < t \le 500\,\mu\text{s}$)**: Inflow maintained at $0\,\text{m/s}$. Chamber pressures equalize, allowing the plate to dynamically unload and relax.
 
 ### Comparison: Case A (Purely Elastic) vs Case B (Elastoplastic)
 
@@ -86,7 +86,7 @@ flowchart LR
         R1 --> R2
     end
 
-    subgraph Stage3["Stage 3: Hydrodynamic Unloading & Relaxation (45 to 300 µs)"]
+    subgraph Stage3["Stage 3: Extended Dynamic Relaxation (45 to 500 µs)"]
         direction TB
         CaseA["Case A: Purely Elastic<br/>Rebounds towards initial geometry (Dz -> 0 µm)<br/>Plastic Strain eps_p = Absent (Not modeled)"]
         CaseB["Case B: Elastoplastic Copper<br/>Retains permanent concave dent (Dz,residual > 0 µm)<br/>Irreversible Plastic Strain eps_p = 0.000924"]
@@ -95,33 +95,51 @@ flowchart LR
     Stage1 ==> Stage2 ==> Stage3
 ```
 
-### 300 µs Benchmark Results: Elastic Relaxation vs. Permanent Plastic Dent
+### 300 µs Benchmark Results: Extended Dynamic Recovery & Offset Analysis
 
 | Metric | Case A: Purely Elastic (`linearElastic`) | Case B: Elastoplastic (`linearElasticMisesPlastic`) | Physical Significance |
 | :--- | :---: | :---: | :--- |
 | **Material Plasticity** | Absent (Not modeled) | Active Yielding ($\sigma_{eq} \ge 65.0\,\text{MPa}$) | Constitutive formulation |
 | **Peak Deflection ($D_{z,max}$)** | **$41.70\,\mu\text{m}$** (at $52\,\mu\text{s}$) | **$45.44\,\mu\text{m}$** (at $52\,\mu\text{s}$) | Additional $3.74\,\mu\text{m}$ plastic peak |
 | **Deflection at $t = 100\,\mu\text{s}$** | **$27.07\,\mu\text{m}$** | **$30.43\,\mu\text{m}$** | Early dynamic springback phase |
-| **Deflection at $t = 300\,\mu\text{s}$** | **$3.16\,\mu\text{m}$** | **$8.13\,\mu\text{m}$** | **Permanent residual dent = $4.97\,\mu\text{m}$** |
-| **Dynamic Recovery Ratio (300 µs)** | **$92.4\%$** | **$82.1\%$** | Elastic plate approaches zero |
-| **End Displacement Rate ($\dot{D}_z$)** | **$0.055\,\text{m/s}$** | **$0.051\,\text{m/s}$** | Velocity decays towards static equilibrium |
+| **Deflection at $t = 300\,\mu\text{s}$** | **$3.16\,\mu\text{m}$** | **$8.13\,\mu\text{m}$** | Significant elastic recovery ($92.4\%$) |
+| **Total Recovered Displacement** | **$38.54\,\mu\text{m}$** ($92.4\%$) | **$37.31\,\mu\text{m}$** ($82.1\%$) | Elastic plate approaches zero |
+| **End Displacement Rate ($\dot{D}_z$)** | **$0.058\,\text{m/s}$** | **$0.054\,\text{m/s}$** | Ongoing slow dynamic motion ($\approx 1\,\mu\text{m}/20\,\mu\text{s}$) |
+| **End Interface Force ($F_z$)** | **$0.732\,\text{N}$** | **$0.614\,\text{N}$** | Hydrodynamic load decayed by $> 99.5\%$ |
 | **Equivalent Plastic Strain ($\varepsilon_{p,eq}$)** | **Absent** | **$0.000924$** | Direct proof of permanent material yielding |
 
-### Physical Dynamic Recovery & Permanent Indentation Insights
+### Quantitative Plastic Offset Statistics: $\Delta D(t) = D_{\text{plastic}}(t) - D_{\text{elastic}}(t)$
+
+Evaluated over the final $100\,\mu\text{s}$ window ($200 \le t \le 300\,\mu\text{s}$):
+- **Mean Offset ($\overline{\Delta D}$)**: **$4.7790\,\mu\text{m}$**
+- **Standard Deviation ($\sigma_{\Delta D}$)**: **$0.0951\,\mu\text{m}$** ($< 0.1\,\mu\text{m}$ variation across $100\,\mu\text{s}$)
+- **Offset Drift Rate ($\frac{d(\Delta D)}{dt}$)**: **$0.0030\,\mu\text{m}/\mu\text{s}$** ($3.0\,\text{nm}/\mu\text{s}$)
+
+```
+Time [µs] | Elastic Dz [µm] | Plastic Dz [µm] | Offset ΔD [µm]
+--------------------------------------------------------------
+   140.0  |      17.47      |      22.40      |     4.93
+   180.0  |      12.33      |      17.15      |     4.82
+   220.0  |       8.50      |      13.18      |     4.68
+   260.0  |       5.45      |      10.25      |     4.80
+   300.0  |       3.16      |       8.13      |     4.97
+```
+
+### Physical Dynamic Recovery & Equilibrium Qualification
 
 1. **Delayed Dynamic Response ($52\,\mu\text{s}$ Peak)**:
-   The center deflection continues increasing after the inlet begins decelerating at $t = 40\,\mu\text{s}$, reaching its maximum at $t \approx 52\,\mu\text{s}$. This delayed response stems from the combined inertia of the coupled fluid-structure system:
-   - **Fluid Inertia**: The moving column of water continues impinging and maintaining high local stagnation pressure against the plate before momentum fully dissipates.
+   The center deflection continues increasing after the inlet begins decelerating at $t = 40\,\mu\text{s}$, reaching its maximum at $t \approx 52\,\mu\text{s}$. This delayed response stems from the combined dynamics of the coupled fluid-structure system:
+   - **Fluid Inertia**: The moving water column continues impinging and maintaining stagnation pressure before momentum dissipates.
    - **Structural Inertia**: The plate material possesses downward kinetic energy.
    - **Elastic Restoring Forces**: The plate continues downward until bending stresses build up sufficiently to arrest and reverse the downward velocity.
 
-2. **Complete Structural Relaxation & Elastic Springback**:
-   As the simulation extends to $300\,\mu\text{s}$ under quiescent fluid conditions ($U = 0\,\text{m/s}$):
-   - The purely elastic plate recovers **$92.4\%$** of its peak deformation, dropping from $41.70\,\mu\text{m} \to 3.16\,\mu\text{m}$ and asymptotically approaching zero.
-   - The displacement velocity $\dot{D}_z$ drops by an order of magnitude (from $0.406\,\text{m/s}$ at $100\,\mu\text{s}$ to $0.055\,\text{m/s}$ at $300\,\mu\text{s}$).
+2. **Hydrodynamic Force Relief Verified**:
+   Tracking the OpenFOAM interface forces confirms that the hydrodynamic load drops from $151.45\,\text{N}$ at initial impact down to **$0.61 - 0.73\,\text{N}$** at $300\,\mu\text{s}$ ($< 0.5\%$ of impact load), verifying that the plate is genuinely experiencing hydrodynamic unloading.
 
-3. **Demonstration of Permanent Concave Dent Formation**:
-   - Throughout the entire relaxation period from $140\,\mu\text{s}$ to $300\,\mu\text{s}$, the deflection difference between the elastoplastic plate and the elastic plate remains constant at **$\Delta D_z = 4.97 \pm 0.15\,\mu\text{m}$**.
-   - This $\sim 5.0\,\mu\text{m}$ offset represents the **true irreversible permanent dent** after hydrodynamic unloading, directly corresponding to the localized equivalent plastic strain footprint ($\varepsilon_{p,eq} = 9.24 \times 10^{-4}$).
+3. **Status: Extended Dynamic Recovery (Not Static Equilibrium Yet)**:
+   While the displacement rate has dropped by an order of magnitude (from $\sim 0.4\,\text{m/s}$ at $100\,\mu\text{s}$ to $\sim 0.05\,\text{m/s}$ at $300\,\mu\text{s}$), the plate is still moving approximately $1.0\,\mu\text{m}$ every $20\,\mu\text{s}$. Therefore, this state represents **extended dynamic recovery** rather than static equilibrium.
 
-The benchmark plot is generated by [`compare_elastic_plastic.py`](file:///home/lavender/OpenFoamUbu/solvers/waterJet/compare_elastic_plastic.py) and saved to [`elastic_vs_plastic_comparison.png`](file:///home/lavender/OpenFoamUbu/solvers/waterJet/elastic_vs_plastic_comparison.png).
+4. **Extension to 500 µs**:
+   To bring the elastic plate to near-zero displacement ($D_z < 1\,\mu\text{m}$) and observe stationary equilibrium ($|\dot{D}_z| \to 0$), the relaxation period is extended to **$500\,\mu\text{s}$**.
+
+The 4-panel comparison plot is generated by [`compare_elastic_plastic.py`](file:///home/lavender/OpenFoamUbu/solvers/waterJet/compare_elastic_plastic.py) and saved to [`elastic_vs_plastic_comparison.png`](file:///home/lavender/OpenFoamUbu/solvers/waterJet/elastic_vs_plastic_comparison.png).
