@@ -14,20 +14,22 @@ echo " Submerged Continuous Waterjet Impinging on Copper Plate  "
 echo " Elastoplastic FSI Dent Simulation (solids4Foam)          "
 echo "=========================================================="
 
+# Clean previous times and restore clean 0 directory
+rm -rf [1-9]* 0.[0-9]* postProcessing log.* constant/fluid/polyMesh constant/solid/polyMesh
+rm -rf 0
+cp -r 0.orig 0
+
 # Check if velocity argument passed (e.g., ./Allrun 50)
 JET_VEL=30
 if [ -n "$1" ]; then
     JET_VEL=$1
     echo "Configuring jet inlet velocity: ${JET_VEL} m/s"
     sed -i "s/uniform (0 0 -[0-9.]\+)/uniform (0 0 -${JET_VEL})/" 0/fluid/U
-    sed -i "s/volVectorFieldValue U (0 0 -[0-9.]\+)/volVectorFieldValue U (0 0 -${JET_VEL})/" system/fluid/setFieldsDict
-    sed -i "s/volVectorFieldValue U (0 0 -[0-9.]\+)/volVectorFieldValue U (0 0 -${JET_VEL})/" system/setFieldsDict
+    sed -i "s/volVectorFieldValue U (0 0 -[0-9.]\+)/volVectorFieldValue U (0 0 -${VEL})/" system/fluid/setFieldsDict
+    sed -i "s/volVectorFieldValue U (0 0 -[0-9.]\+)/volVectorFieldValue U (0 0 -${VEL})/" system/setFieldsDict
 fi
 
-# Clean previous times if not restart
-rm -rf [1-9]* postProcessing log.*
-
-# 1. Generate solid plate mesh
+# 1. Generate solid plate mesh (8 cells through thickness)
 echo "Step 1: Meshing solid copper plate..."
 blockMesh -region solid > log.blockMeshSolid 2>&1
 
@@ -35,7 +37,7 @@ blockMesh -region solid > log.blockMeshSolid 2>&1
 echo "Step 2: Meshing fluid water domain..."
 blockMesh -region fluid > log.blockMeshFluid 2>&1
 
-# 3. Initialise nozzle jet region connected to inlet boundary via setFields
+# 3. Initialise nozzle jet region connected down to 0.2 mm above plate
 echo "Step 3: Initialising nozzle jet velocity field via setFields..."
 setFields -region fluid > log.setFieldsFluid 2>&1
 
@@ -44,4 +46,4 @@ echo "Step 4: Executing solids4Foam coupled FSI solver..."
 solids4Foam > log.solids4Foam 2>&1
 
 echo "Simulation completed successfully!"
-echo "Check indentation history in postProcessing/0/solidPointDisplacement_centerPlateDisplacement.dat"
+python3 plot_results.py

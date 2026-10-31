@@ -1,2 +1,4 @@
 #!/bin/bash
 rm -rf [1-9]* 0.[0-9]* postProcessing log.* constant/fluid/polyMesh constant/solid/polyMesh
+rm -rf 0
+cp -r 0.orig 0

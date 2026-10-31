@@ -19,10 +19,11 @@ defaultFieldValues
 regions
 (
     // Cylindrical initialised nozzle region connected directly to inlet boundary
+    // and extending almost all the way to the copper plate (Z = 0.0002 to 0.006001)
     cylinderToCell
     {
         point1  (0 0 0.006001); // Top inlet boundary (connected)
-        point2  (0 0 0.003);    // Initial jet development zone
+        point2  (0 0 0.0002);   // Extends down to 0.2 mm above plate
         radius  0.001;          // Nozzle radius 1 mm
         fieldValues
         (

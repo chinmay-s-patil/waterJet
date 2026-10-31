@@ -19,13 +19,13 @@ startTime       0;
 
 stopAt          endTime;
 
-endTime         5e-05; // 5 steps test
+endTime         4e-06; // 100 microseconds
 
-deltaT          1e-05;
+deltaT          2e-06;  // 2 microseconds (Co < 0.5)
 
 writeControl    timeStep;
 
-writeInterval   1;
+writeInterval   1;      // write every 10 microseconds (10 time directories total)
 
 purgeWrite      0;
 

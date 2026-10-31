@@ -21,20 +21,20 @@ FoamFile
     interface
     {
         type            patch;
-        nFaces          1600;
-        startFace       17280;
+        nFaces          1936;
+        startFace       43824;
     }
     bottomPlate
     {
         type            patch;
-        nFaces          1600;
-        startFace       18880;
+        nFaces          1936;
+        startFace       45760;
     }
     clampedEdges
     {
         type            patch;
-        nFaces          640;
-        startFace       20480;
+        nFaces          1408;
+        startFace       47696;
     }
 )
 
