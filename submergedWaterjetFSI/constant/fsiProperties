@@ -1,0 +1,35 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| solids4foam: solid mechanics and fluid-solid interaction simulations        |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      fsiProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+fluidSolidInterface Aitken; // Aitken dynamic under-relaxation (or IQNILS)
+
+"fixedRelaxationCoeffs|AitkenCoeffs|IQNILSCoeffs"
+{
+    solidPatch      interface;
+    fluidPatch      plate;
+
+    predictor       yes;
+    predictSolid    yes;
+
+    relaxationFactor 0.1;
+    outerCorrTolerance 1e-4;
+    nOuterCorr      50;
+
+    additionalMeshCorrection yes;
+    incrementalResiduals no;
+    coupled         yes;
+    interfaceTransferMethod directMap;
+    writeResidualsToFile yes;
+}
+
+// ************************************************************************* //

@@ -1,0 +1,35 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| solids4foam: solid mechanics and fluid-solid interaction simulations        |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant/solid";
+    object      mechanicalProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+planeStress     no;
+
+mechanical
+(
+    copper
+    {
+        // Option 1: Small-strain elastoplasticity (default, highly stable)
+        type            linearElasticMisesPlastic;
+
+        // Option 2: Finite-strain neo-Hookean elastoplasticity
+        // type         neoHookeanElasticMisesPlastic;
+
+        rho             rho [1 -3 0 0 0 0 0] 8960;
+        E               E [1 -1 -2 0 0 0 0] 110e9;
+        nu              nu [0 0 0 0 0 0 0] 0.34;
+        "file|fileName" "$FOAM_CASE/constant/solid/plasticStrainVsYieldStress";
+        outOfBounds     clamp;
+        solvePressureEqn no;
+    }
+);
+
+// ************************************************************************* //

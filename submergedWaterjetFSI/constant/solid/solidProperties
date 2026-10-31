@@ -1,0 +1,40 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| solids4foam: solid mechanics and fluid-solid interaction simulations        |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant/solid";
+    object      solidProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solidModel     linearGeometryTotalDisplacement;
+
+linearGeometryTotalDisplacementCoeffs
+{
+    predictor            yes;
+    nCorrectors          500;
+    rTol                 1e-3;
+    aTol                 1e-4;
+    sTol                 1e-4;
+    infoFrequency        50;
+    writeConvergedReason true;
+    stopOnError          false;
+}
+
+nonLinearGeometryUpdatedLagrangianCoeffs
+{
+    predictor            yes;
+    nCorrectors          500;
+    rTol                 1e-3;
+    aTol                 1e-4;
+    sTol                 1e-4;
+    infoFrequency        50;
+    writeConvergedReason true;
+    stopOnError          false;
+}
+
+// ************************************************************************* //
