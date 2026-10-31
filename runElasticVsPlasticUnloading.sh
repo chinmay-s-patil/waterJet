@@ -2,11 +2,74 @@
 set -e
 
 # ==============================================================================
-# Benchmark Experiment: Purely Elastic vs Elastoplastic Copper Plate
-# Goal: Prove permanent indentation retention vs elastic springback
+# Benchmark Experiment: Purely Elastic vs Elastoplastic Dynamic Unloading
+# Stage 1 (0 to 40 us): Impinging jet loading at 30 m/s
+# Stage 2 (40 to 45 us): Jet ramp-down to 0 m/s
+# Stage 3 (45 to 100 us): Complete shut-off and hydrodynamic unloading
+# Goal: Directly measure elastic springback vs permanent plastic dent retention
 # ==============================================================================
 
 BASE_CASE="submergedWaterjetFSI"
+
+# Function to configure loading-unloading time-dependent inlet
+configure_unloading_inlet() {
+    local target_u="$1"
+    cat << 'U_EOF' > "${target_u}"
+/*--------------------------------*- C++ -*----------------------------------*\
+| solids4foam: solid mechanics and fluid-solid interaction simulations        |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    location    "0/fluid";
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (0 0 0);
+
+boundaryField
+{
+    inlet
+    {
+        type            uniformFixedValue;
+        value           uniform (0 0 -30);
+        uniformValue    table
+        (
+            (0.000000   (0 0 -30))
+            (0.000040   (0 0 -30))
+            (0.000045   (0 0 0))
+            (0.000100   (0 0 0))
+        );
+    }
+
+    topWall
+    {
+        type            fixedValue;
+        value           uniform (0 0 0);
+    }
+
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform (0 0 0);
+        value           uniform (0 0 0);
+    }
+
+    plate
+    {
+        type            movingWallVelocity;
+        value           uniform (0 0 0);
+    }
+}
+
+// ************************************************************************* //
+U_EOF
+}
 
 echo "=========================================================="
 echo " Setting up Case A: Purely Elastic Copper (linearElastic) "
@@ -16,7 +79,11 @@ cp -r "${BASE_CASE}" case_elastic
 cd case_elastic
 ./Allclean
 
-# Configure purely linear elastic copper material
+# 1. Configure loading-unloading inlet
+configure_unloading_inlet "0/fluid/U"
+configure_unloading_inlet "0.orig/fluid/U"
+
+# 2. Configure purely linear elastic copper material
 cat << 'MEC_EOF' > constant/solid/mechanicalProperties
 /*--------------------------------*- C++ -*----------------------------------*\
 | solids4foam: solid mechanics and fluid-solid interaction simulations        |
@@ -63,6 +130,11 @@ rm -rf case_plastic
 cp -r "${BASE_CASE}" case_plastic
 cd case_plastic
 ./Allclean
+
+# 1. Configure loading-unloading inlet
+configure_unloading_inlet "0/fluid/U"
+configure_unloading_inlet "0.orig/fluid/U"
+
 echo "Meshing and running Case B (Elastoplastic)..."
 blockMesh -region solid > log.blockMeshSolid 2>&1
 blockMesh -region fluid > log.blockMeshFluid 2>&1
@@ -71,5 +143,5 @@ solids4Foam > log.solids4Foam 2>&1
 cd ..
 echo ">>> Case B completed."
 
-# Run comparison script
+# Run comparison and springback evaluation
 python3 compare_elastic_plastic.py

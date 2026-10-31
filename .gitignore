@@ -1,4 +1,10 @@
 externalSolverReference
-
-[1-9]*
 random.md
+[1-9]*
+0.[0-9]*
+log.*
+*.log
+case_elastic/
+case_plastic/
+
+random/

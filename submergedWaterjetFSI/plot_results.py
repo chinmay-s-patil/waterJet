@@ -43,7 +43,7 @@ def parse_scalar_field(path):
 
 def parse_forces(path):
     """
-    Parses OpenFOAM forces.dat file.
+    Parses OpenFOAM force.dat or forces.dat file.
     Returns (times, F_pressure_z, F_viscous_z, F_total_z)
     """
     if not os.path.exists(path):
@@ -54,15 +54,27 @@ def parse_forces(path):
             line = line.strip()
             if not line or line.startswith('#'):
                 continue
-            # Format: time ((px py pz) (vx vy vz) (porox poroy poroz)) ...
-            # Extract numbers inside parentheses
             m = re.findall(r'\(([0-9.eE+-]+)\s+([0-9.eE+-]+)\s+([0-9.eE+-]+)\)', line)
             parts = line.split()
-            if len(parts) > 0 and len(m) >= 2:
+            if len(parts) >= 10 and len(m) == 0:
+                # OpenFOAM space-separated columns:
+                # Time total_x total_y total_z pressure_x pressure_y pressure_z viscous_x viscous_y viscous_z
                 try:
                     t = float(parts[0])
-                    pz = float(m[0][2]) # Pressure force Z
-                    vz = float(m[1][2]) # Viscous force Z
+                    tot_z = abs(float(parts[3]))
+                    pz = abs(float(parts[6]))
+                    vz = abs(float(parts[9]))
+                    times.append(t * 1e6)
+                    fp_z.append(pz)
+                    fv_z.append(vz)
+                    ft_z.append(tot_z)
+                except ValueError:
+                    continue
+            elif len(parts) > 0 and len(m) >= 2:
+                try:
+                    t = float(parts[0])
+                    pz = abs(float(m[0][2]))
+                    vz = abs(float(m[1][2]))
                     times.append(t * 1e6) # us
                     fp_z.append(pz)
                     fv_z.append(vz)
@@ -128,9 +140,12 @@ def main():
         max_epsp.append(p_val)
 
     # Check for forces file
-    forces_candidates = glob.glob("postProcessing/fluid/forces/*/forces.dat") + \
+    forces_candidates = glob.glob("postProcessing/fluid/*/0/force*.dat") + \
+                        glob.glob("postProcessing/fluid/*/*/force*.dat") + \
+                        glob.glob("postProcessing/fluid/forces/*/forces.dat") + \
                         glob.glob("postProcessing/forces/*/forces.dat") + \
-                        glob.glob("postProcessing/*/forces.dat")
+                        glob.glob("postProcessing/*/forces.dat") + \
+                        glob.glob("postProcessing/*/force.dat")
     f_times, fp_z, fv_z, ft_z = [], [], [], []
     if forces_candidates:
         f_times, fp_z, fv_z, ft_z = parse_forces(forces_candidates[0])
@@ -141,6 +156,7 @@ def main():
     print("Annealed Copper Yield Stress: 65.0 MPa | Plate Thickness: 0.3 mm")
     print("Jet Velocity: 30 m/s | Square Nozzle: 2x2 mm (Area: 4 mm²)")
     print("Theoretical Steady Jet Momentum Thrust: F = rho * A * U² = 3.60 N")
+    print("Total Plate Patch Area: 20x20 mm = 400 mm² (100x nozzle area)")
     print("--------------------------------------------------------------------------")
     
     if times:
@@ -165,6 +181,21 @@ def main():
         print("==========================================================================")
     else:
         print("No displacement history records found.")
+
+    # Print forces summary if available
+    if f_times:
+        print("\n--------------------------------------------------------------------------")
+        print(" Hydrodynamic Force on Entire Plate Patch (from forces functionObject)    ")
+        print("--------------------------------------------------------------------------")
+        print(f"{'Time [us]':>10} | {'Pressure Force [N]':>18} | {'Viscous Force [N]':>18} | {'Total Force [N]':>16}")
+        print("--------------------------------------------------------------------------")
+        # Subsample to at most 10 rows for clean terminal display
+        stride = max(1, len(f_times) // 10)
+        for i in range(0, len(f_times), stride):
+            print(f"{f_times[i]:10.2f} | {fp_z[i]:18.3f} | {fv_z[i]:18.5f} | {ft_z[i]:16.3f}")
+        if (len(f_times) - 1) % stride != 0:
+            print(f"{f_times[-1]:10.2f} | {fp_z[-1]:18.3f} | {fv_z[-1]:18.5f} | {ft_z[-1]:16.3f}")
+        print("==========================================================================")
 
     # 3-Panel Diagnostic Plot
     try:
@@ -206,6 +237,24 @@ def main():
         out_img = "indentation_vs_time.png"
         plt.savefig(out_img, dpi=200)
         print(f"3-Panel diagnostic plot saved to: {out_img}")
+
+        # Dedicated Forces Plot if force data exists
+        if f_times:
+            plt.figure(figsize=(9, 5))
+            plt.plot(f_times, ft_z, 'k-', lw=2, label='Total Normal Force ($F_z$)')
+            plt.plot(f_times, fp_z, 'r--', lw=1.5, label='Pressure Force ($F_{p,z}$)')
+            plt.plot(f_times, fv_z, 'b:', lw=1.5, label='Viscous Force ($F_{v,z}$)')
+            plt.axhline(3.60, color='blue', linestyle='-.', lw=1.5, label='Steady Jet Momentum Thrust (3.60 N)')
+            plt.xlabel('Simulation Time [$\\mu$s]', fontsize=11, fontweight='bold')
+            plt.ylabel('Force on Plate Patch [N]', fontsize=11, fontweight='bold')
+            plt.title('Hydrodynamic Interface Force History (plate patch: 20x20 mm)', fontsize=12, fontweight='bold')
+            plt.grid(True, linestyle='--', alpha=0.6)
+            plt.legend(fontsize=10)
+            plt.tight_layout()
+            out_force_img = "forces_vs_time.png"
+            plt.savefig(out_force_img, dpi=200)
+            print(f"Force diagnostic plot saved to: {out_force_img}")
+
     except Exception as e:
         print(f"Plot generation note: {e}")
 
