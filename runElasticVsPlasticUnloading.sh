@@ -6,7 +6,7 @@ set -e
 # Parallel Decomposition: 8 cores (hierarchical 4x2x1)
 # Stage 1 (0 to 40 us): Impinging jet loading at 30 m/s
 # Stage 2 (40 to 45 us): Jet ramp-down to 0 m/s
-# Stage 3 (45 to 500 us): Complete shut-off and extended hydrodynamic relaxation
+# Stage 3 (45 to 1000 us): Extended hydrodynamic relaxation & static equilibrium
 # Goal: Directly measure elastic springback vs permanent plastic dent retention
 # ==============================================================================
 
@@ -45,7 +45,7 @@ boundaryField
             (0.000000   (0 0 -30))
             (0.000040   (0 0 -30))
             (0.000045   (0 0 0))
-            (0.000500   (0 0 0))
+            (0.001000   (0 0 0))
         );
     }
 
@@ -105,24 +105,28 @@ hierarchicalCoeffs
 DEC_EOF
 }
 
-# Function to set extended simulation duration (500 us) with per-step force logging
+# Function to set extended simulation duration (1000 us = 1e-3 s) and per-step monitoring
 configure_extended_duration() {
     local case_dir="$1"
-    sed -i 's/^endTime\s\+[0-9.eE+-]\+;/endTime         5e-04;/' "${case_dir}/system/controlDict"
+    sed -i 's/^endTime\s\+[0-9.eE+-]\+;/endTime         1e-03;/' "${case_dir}/system/controlDict"
     sed -i 's/^writeInterval\s\+[0-9]\+;/writeInterval   25;/' "${case_dir}/system/controlDict"
+    
+    # Ensure all functionObjects write every timeStep
+    sed -i '/centerPlateDisplacement/,/}/ s/writeInterval\s\+[0-9]\+;/writeInterval       1;/' "${case_dir}/system/controlDict"
     sed -i '/interfaceForces/,/}/ s/writeInterval\s\+[0-9]\+;/writeInterval       1;/' "${case_dir}/system/controlDict"
+    sed -i '/fluidMeanVelocity/,/}/ s/writeInterval\s\+[0-9]\+;/writeInterval       1;/' "${case_dir}/system/controlDict"
 }
 
 echo "=========================================================="
 echo " Setting up Case A: Purely Elastic Copper (linearElastic) "
-echo " Running on 8 cores in parallel (500 us duration)         "
+echo " Running on ${NUM_PROCS} cores in parallel (1000 us duration)     "
 echo "=========================================================="
 rm -rf case_elastic
 cp -r "${BASE_CASE}" case_elastic
 cd case_elastic
 ./Allclean
 
-# 1. Configure loading-unloading inlet & 500 us duration
+# 1. Configure loading-unloading inlet & 1000 us duration
 configure_unloading_inlet "0/fluid/U"
 configure_unloading_inlet "0.orig/fluid/U"
 configure_extended_duration "."
@@ -184,14 +188,14 @@ echo ">>> Case A completed successfully!"
 
 echo "=========================================================="
 echo " Setting up Case B: Elastoplastic Copper (Mises Plastic)  "
-echo " Running on 8 cores in parallel (500 us duration)         "
+echo " Running on ${NUM_PROCS} cores in parallel (1000 us duration)    "
 echo "=========================================================="
 rm -rf case_plastic
 cp -r "${BASE_CASE}" case_plastic
 cd case_plastic
 ./Allclean
 
-# 1. Configure loading-unloading inlet & 500 us duration
+# 1. Configure loading-unloading inlet & 1000 us duration
 configure_unloading_inlet "0/fluid/U"
 configure_unloading_inlet "0.orig/fluid/U"
 configure_extended_duration "."

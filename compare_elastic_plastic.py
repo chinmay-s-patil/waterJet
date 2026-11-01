@@ -18,7 +18,7 @@ def read_displacement(case_dir):
     pattern = os.path.join(case_dir, "postProcessing/*/solidPointDisplacement_centerPlateDisplacement.dat")
     files = glob.glob(pattern)
     if not files:
-        return np.array([]), np.array([])
+        raise FileNotFoundError(f"Missing displacement data in {case_dir}/postProcessing/")
     times, dz_um = [], []
     with open(files[0], 'r') as f:
         for line in f:
@@ -34,6 +34,8 @@ def read_displacement(case_dir):
                     dz_um.append(defl)
                 except ValueError:
                     continue
+    if not times:
+        raise ValueError(f"No valid displacement rows found in {files[0]}")
     return np.array(times), np.array(dz_um)
 
 def read_forces(case_dir):
@@ -41,26 +43,60 @@ def read_forces(case_dir):
                  glob.glob(os.path.join(case_dir, "postProcessing/fluid/*/*/force*.dat")) + \
                  glob.glob(os.path.join(case_dir, "postProcessing/*/force*.dat"))
     if not candidates:
-        return np.array([]), np.array([]), np.array([])
+        raise FileNotFoundError(f"Missing force data in {case_dir}/postProcessing/")
     path = candidates[0]
-    times, fp_z, ft_z = [], [], []
+    times, ft_z, fp_z, fv_z = [], [], [], []
     with open(path, 'r') as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith('#'):
                 continue
             parts = line.split()
+            # Expected space-separated columns in OpenFOAM:
+            # Time total_x total_y total_z pressure_x pressure_y pressure_z viscous_x viscous_y viscous_z
             if len(parts) >= 10:
                 try:
                     t = float(parts[0]) * 1e6 # us
-                    tot = abs(float(parts[3])) # N
-                    pz = abs(float(parts[6])) # N
+                    tot = float(parts[3]) # signed N (positive = downward normal on plate)
+                    pz = float(parts[6])  # signed N
+                    vz = float(parts[9])  # signed N
                     times.append(t)
                     ft_z.append(tot)
                     fp_z.append(pz)
+                    fv_z.append(vz)
                 except ValueError:
                     continue
-    return np.array(times), np.array(fp_z), np.array(ft_z)
+    if not times:
+        raise ValueError(f"No valid force records found in {path}")
+    return np.array(times), np.array(ft_z), np.array(fp_z), np.array(fv_z)
+
+def read_fluid_velocity(case_dir):
+    candidates = glob.glob(os.path.join(case_dir, "postProcessing/fluid/fluidMeanVelocity/*/volFieldValue.dat")) + \
+                 glob.glob(os.path.join(case_dir, "postProcessing/*/fluidMeanVelocity/*/volFieldValue.dat"))
+    if not candidates:
+        return np.array([]), np.array([])
+    times, mag_u = [], []
+    with open(candidates[0], 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            parts = line.split()
+            # Expected: Time (Ux Uy Uz) or Time magU
+            if len(parts) >= 2:
+                try:
+                    t = float(parts[0]) * 1e6
+                    m = re.findall(r'\(([0-9.eE+-]+)\s+([0-9.eE+-]+)\s+([0-9.eE+-]+)\)', line)
+                    if m:
+                        ux, uy, uz = float(m[0][0]), float(m[0][1]), float(m[0][2])
+                        speed = np.sqrt(ux**2 + uy**2 + uz**2)
+                    else:
+                        speed = abs(float(parts[1]))
+                    times.append(t)
+                    mag_u.append(speed)
+                except ValueError:
+                    continue
+    return np.array(times), np.array(mag_u)
 
 def get_expected_end_time(case_dir):
     control_dict = os.path.join(case_dir, "system", "controlDict")
@@ -138,33 +174,35 @@ def main():
     case_elastic = "case_elastic"
     case_plastic = "case_plastic"
 
-    t_el, d_el = read_displacement(case_elastic)
-    t_pl, d_pl = read_displacement(case_plastic)
+    try:
+        t_el, d_el = read_displacement(case_elastic)
+        t_pl, d_pl = read_displacement(case_plastic)
+    except Exception as e:
+        print(f"Error loading displacement data: {e}")
+        return
 
-    if len(t_el) == 0 and len(t_pl) == 0:
-        print("Notice: No displacement data found in case_elastic or case_plastic yet.")
+    try:
+        tf_el, ft_el, fp_el, fv_el = read_forces(case_elastic)
+        tf_pl, ft_pl, fp_pl, fv_pl = read_forces(case_plastic)
+    except Exception as e:
+        print(f"Error loading interface force data: {e}")
         return
 
     expected_end_el = get_expected_end_time(case_elastic)
     expected_end_pl = get_expected_end_time(case_plastic)
 
-    tf_el, fp_el, ft_el = read_forces(case_elastic)
-    tf_pl, fp_pl, ft_pl = read_forces(case_plastic)
-
     epsp_str_el, _ = parse_plastic_strain(case_elastic)
     epsp_str_pl, epsp_val_pl = parse_plastic_strain(case_plastic)
 
-    rate_el = compute_displacement_rate(t_el, d_el) if len(t_el) > 0 else np.array([])
-    rate_pl = compute_displacement_rate(t_pl, d_pl) if len(t_pl) > 0 else np.array([])
+    rate_el = compute_displacement_rate(t_el, d_el)
+    rate_pl = compute_displacement_rate(t_pl, d_pl)
 
     t_end_el = t_el[-1] if len(t_el) > 0 else 0.0
     t_end_pl = t_pl[-1] if len(t_pl) > 0 else 0.0
 
     # Relaxation check
     def check_relaxation(t_arr, r_arr):
-        if len(t_arr) == 0 or len(r_arr) == 0:
-            return "N/A", 0.0
-        cutoff = t_arr[-1] * 0.85
+        cutoff = t_arr[-1] - 100.0 if t_arr[-1] > 100.0 else t_arr[-1] * 0.85
         recent = [abs(r_arr[i]) for i in range(len(t_arr)) if t_arr[i] >= cutoff]
         mean_rate = np.mean(recent) if recent else abs(r_arr[-1])
         if mean_rate < 0.02: # < 0.02 m/s
@@ -192,6 +230,14 @@ def main():
     if len(t_win) > 2:
         slope_delta, _ = np.polyfit(t_win, delta_win, 1)
 
+    # Force statistics over final 100 us
+    mask_f_el = tf_el >= t_window_start
+    mask_f_pl = tf_pl >= t_window_start
+    mean_f_el = np.mean(ft_el[mask_f_el])
+    mean_f_pl = np.mean(ft_pl[mask_f_pl])
+    std_f_el = np.std(ft_el[mask_f_el])
+    std_f_pl = np.std(ft_pl[mask_f_pl])
+
     print("==========================================================================")
     print(" Elastic vs Elastoplastic Dynamic Unloading & Recovery Benchmark          ")
     print("==========================================================================")
@@ -203,10 +249,10 @@ def main():
 
     print(f"{'Simulation Duration':<34} | {f'{t_end_el:.1f} us{warn_el}':<22} | {f'{t_end_pl:.1f} us{warn_pl}':<22}")
 
-    max_d_el = np.max(d_el) if len(d_el) > 0 else 0.0
-    fin_d_el = d_el[-1] if len(d_el) > 0 else 0.0
-    max_d_pl = np.max(d_pl) if len(d_pl) > 0 else 0.0
-    fin_d_pl = d_pl[-1] if len(d_pl) > 0 else 0.0
+    max_d_el = np.max(d_el)
+    fin_d_el = d_el[-1]
+    max_d_pl = np.max(d_pl)
+    fin_d_pl = d_pl[-1]
 
     rec_d_el = max_d_el - fin_d_el
     rec_d_pl = max_d_pl - fin_d_pl
@@ -218,20 +264,20 @@ def main():
     print(f"{'Recovered Displacement [um]':<34} | {rec_d_el:20.4f} um | {rec_d_pl:20.4f} um")
     print(f"{'Dynamic Recovery Ratio [%]':<34} | {rec_ratio_el:20.1f} %  | {rec_ratio_pl:20.1f} %")
     print(f"{'Structural Relaxation Status':<34} | {rel_status_el:<22} | {rel_status_pl:<22}")
-    print(f"{'End Displacement Rate [m/s]':<34} | {f'{mean_v_el:.4f} m/s':<22} | {f'{mean_v_pl:.4f} m/s':<22}")
+    print(f"{'Final Displacement Rate [m/s]':<34} | {f'{mean_v_el:.4f} m/s':<22} | {f'{mean_v_pl:.4f} m/s':<22}")
     
-    fin_f_el = ft_el[-1] if len(ft_el) > 0 else 0.0
-    fin_f_pl = ft_pl[-1] if len(ft_pl) > 0 else 0.0
-    print(f"{'End Interface Force [N]':<34} | {f'{fin_f_el:.3f} N':<22} | {f'{fin_f_pl:.3f} N':<22}")
+    print(f"{'Final Interface Force Fz [N]':<34} | {f'{ft_el[-1]:.3f} N':<22} | {f'{ft_pl[-1]:.3f} N':<22}")
+    print(f"{'Mean Force (Final 100us) [N]':<34} | {f'{mean_f_el:.3f} +/- {std_f_el:.3f} N':<22} | {f'{mean_f_pl:.3f} +/- {std_f_pl:.3f} N':<22}")
     print(f"{'Plastic Strain (epsilonPEq)':<34} | {epsp_str_el:<22} | {epsp_str_pl:<22}")
     print("--------------------------------------------------------------------------")
-    print(" Irreversible Offset Statistics over Final 100 us: Delta D(t) = D_pl - D_el")
+    print(f" Irreversible Offset Statistics over Final 100 us ({t_window_start:.0f} to {t_common[-1]:.0f} us):")
     print(f"  * Mean Offset (Delta D_mean):    {mean_delta:.4f} um")
     print(f"  * Std Deviation (sigma_Delta):  {std_delta:.4f} um")
     print(f"  * Offset Drift Rate:            {slope_delta:.6f} um/us ({slope_delta*1000:.3f} nm/us)")
+    print(f"  * Instantaneous End Offset:     {delta_d[-1]:.4f} um")
     print("==========================================================================")
 
-    # 4-Panel Master Plot
+    # 4-Panel Master Diagnostic Plot
     fig, axes = plt.subplots(4, 1, figsize=(11, 12), sharex=True, gridspec_kw={'height_ratios': [2, 1.3, 1.2, 1.2]})
     (ax1, ax2, ax3, ax4) = axes
 
@@ -244,42 +290,35 @@ def main():
         ax.axvspan(45, t_max, color='#e5f5e0', alpha=0.55, label='Stage 3: Unloading (0 m/s)')
 
     # Panel 1: Center Displacement
-    if len(t_el) > 0:
-        ax1.plot(t_el, d_el, 'b--', lw=2.2, label=f'Case A: Purely Elastic (End: {fin_d_el:.2f} $\\mu$m)')
-    if len(t_pl) > 0:
-        ax1.plot(t_pl, d_pl, 'r-', lw=2.4, label=f'Case B: Elastoplastic (End: {fin_d_pl:.2f} $\\mu$m)')
+    ax1.plot(t_el, d_el, 'b--', lw=2.2, label=f'Case A: Purely Elastic (End: {fin_d_el:.2f} $\\mu$m)')
+    ax1.plot(t_pl, d_pl, 'r-', lw=2.4, label=f'Case B: Elastoplastic (End: {fin_d_pl:.2f} $\\mu$m)')
     ax1.axhline(0, color='gray', linestyle=':', lw=1)
     ax1.set_ylabel('Center $D_z$ [$\\mu$m]', fontsize=11, fontweight='bold')
-    ax1.set_title('Submerged Waterjet Dynamic Unloading: Elastic vs Elastoplastic Copper Plate', fontsize=12, fontweight='bold')
+    ax1.set_title('Submerged Waterjet Dynamic Unloading: Elastic Springback vs Permanent Plastic Dent', fontsize=12, fontweight='bold')
     ax1.grid(True, linestyle='--', alpha=0.6)
     handles1, labels1 = ax1.get_legend_handles_labels()
     by_label1 = dict(zip(labels1, handles1))
     ax1.legend(by_label1.values(), by_label1.keys(), fontsize=8.5, loc='upper left')
 
     # Panel 2: Plastic Offset Delta D(t)
-    if len(t_common) > 0:
-        ax2.plot(t_common, delta_d, 'm-', lw=2.0, label='$\\Delta D(t) = D_{plastic} - D_{elastic}$')
-        ax2.axhline(mean_delta, color='k', linestyle='--', lw=1.5, label=f'Mean Offset $\\overline{{\\Delta D}} = {mean_delta:.2f}\\,\\mu$m ($\\pm {std_delta:.2f}\\,\\mu$m)')
-        ax2.fill_between(t_common, mean_delta - std_delta, mean_delta + std_delta, color='m', alpha=0.15)
+    ax2.plot(t_common, delta_d, 'm-', lw=2.0, label='$\\Delta D(t) = D_{plastic} - D_{elastic}$')
+    ax2.axhline(mean_delta, color='k', linestyle='--', lw=1.5, label=f'Mean Offset $\\overline{{\\Delta D}} = {mean_delta:.2f}\\,\\mu$m ($\\pm {std_delta:.2f}\\,\\mu$m)')
+    ax2.fill_between(t_common, mean_delta - std_delta, mean_delta + std_delta, color='m', alpha=0.15)
     ax2.set_ylabel('Offset $\\Delta D$ [$\\mu$m]', fontsize=11, fontweight='bold')
     ax2.grid(True, linestyle='--', alpha=0.6)
     ax2.legend(fontsize=8.5, loc='upper left')
 
     # Panel 3: Hydrodynamic Interface Force F_z(t)
-    if len(tf_el) > 0:
-        ax3.plot(tf_el, ft_el, 'b:', lw=1.8, label=f'Elastic Total Force $F_z$ (End: {fin_f_el:.2f} N)')
-    if len(tf_pl) > 0:
-        ax3.plot(tf_pl, ft_pl, 'r-', lw=1.8, label=f'Elastoplastic Total Force $F_z$ (End: {fin_f_pl:.2f} N)')
+    ax3.plot(tf_el, ft_el, 'b:', lw=1.8, label=f'Elastic Normal Force $F_z$ (End: {ft_el[-1]:.2f} N)')
+    ax3.plot(tf_pl, ft_pl, 'r-', lw=1.8, label=f'Elastoplastic Normal Force $F_z$ (End: {ft_pl[-1]:.2f} N)')
     ax3.axhline(0, color='black', linestyle='-', lw=0.8)
     ax3.set_ylabel('Force $F_z$ [N]', fontsize=11, fontweight='bold')
     ax3.grid(True, linestyle='--', alpha=0.6)
     ax3.legend(fontsize=8.5, loc='upper right')
 
     # Panel 4: Deflection Rate d(Dz)/dt
-    if len(t_el) > 0 and len(rate_el) > 0:
-        ax4.plot(t_el, rate_el, 'b--', lw=1.8, label='Elastic Rate $\\dot{D}_z$')
-    if len(t_pl) > 0 and len(rate_pl) > 0:
-        ax4.plot(t_pl, rate_pl, 'r-', lw=1.8, label='Elastoplastic Rate $\\dot{D}_z$')
+    ax4.plot(t_el, rate_el, 'b--', lw=1.8, label='Elastic Rate $\\dot{D}_z$')
+    ax4.plot(t_pl, rate_pl, 'r-', lw=1.8, label='Elastoplastic Rate $\\dot{D}_z$')
     ax4.axhline(0, color='black', linestyle='-', lw=0.8)
     ax4.set_xlabel('Simulation Time [$\\mu$s]', fontsize=11, fontweight='bold')
     ax4.set_ylabel('Rate $\\dot{D}_z$ [m/s]', fontsize=11, fontweight='bold')

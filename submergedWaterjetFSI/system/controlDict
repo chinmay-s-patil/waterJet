@@ -43,8 +43,10 @@ functions
 {
     centerPlateDisplacement
     {
-        type    solidPointDisplacement;
-        point   (0 0 0); // center of copper plate interface
+        type            solidPointDisplacement;
+        point           (0 0 0); // center of copper plate interface
+        writeControl    timeStep;
+        writeInterval   1;
     }
 
     interfaceForces
@@ -61,6 +63,20 @@ functions
         log                 true;
         rhoInf              1000;
         CofR                (0 0 0);
+    }
+
+    fluidMeanVelocity
+    {
+        type            volFieldValue;
+        libs            ( "libfieldFunctionObjects.so" );
+        region          fluid;
+        fields          ( U );
+        operation       volAverage;
+        regionType      all;
+        writeFields     false;
+        writeToFile     true;
+        writeControl    timeStep;
+        writeInterval   1;
     }
 }
 
