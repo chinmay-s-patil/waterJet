@@ -28,8 +28,9 @@ waterJet/
 │   ├── implementation.md            # Mesh topology, boundary conditions, copper card
 │   ├── numerical-methods.md         # ALE FSI coupling, Aitken relaxation, pressure physics
 │   └── validation.md                # Force analysis, springback vs permanent dent
-├── runElasticVsPlasticUnloading.sh   # Dynamic loading & unloading benchmark runner
+├── runElasticVsPlasticUnloading.sh   # 8-core parallel dynamic unloading benchmark
 ├── compare_elastic_plastic.py       # Comparative evaluator for unloading springback
+├── plot_spatial_profile.py          # Spatial dent morphology & 2D indentation mapper
 └── README.md                        # Project landing page and execution instructions
 ```
 
